@@ -144,4 +144,38 @@ $('btn').onclick=()=>{if(!started){started=true;$('btn').textContent='TALK';$('w
  if(!wakeOn)startWake();awaiting=true;mode='listen';target=.4;$('status').textContent='LISTENING'};
 $('wake').onclick=()=>{wakeOn?stopWake():startWake()};
 $('txt').onkeydown=e=>{if(e.key==='Enter'&&$('txt').value.trim()){handle($('txt').value);$('txt').value=''}};
-</script></body></html>
+/* ===== LEAD HUNTER (runs in your browser) ===== */
+const HUNT_CITIES={
+ 'New York':'40.70,-74.02,40.80,-73.93','Los Angeles':'34.00,-118.40,34.10,-118.20','Chicago':'41.85,-87.70,41.95,-87.60',
+ 'Houston':'29.70,-95.48,29.80,-95.33','Miami':'25.70,-80.30,25.85,-80.12','San Francisco':'37.74,-122.47,37.81,-122.39',
+ 'Dallas':'32.75,-96.85,32.85,-96.75','Atlanta':'33.73,-84.42,33.80,-84.35','Seattle':'47.58,-122.38,47.68,-122.28',
+ 'Boston':'42.33,-71.10,42.38,-71.03','London':'51.48,-0.20,51.54,-0.05','Manchester':'53.44,-2.30,53.52,-2.18',
+ 'Birmingham':'52.45,-1.95,52.51,-1.85','Leeds':'53.78,-1.58,53.82,-1.51','Glasgow':'55.84,-4.31,55.88,-4.21',
+ 'Edinburgh':'55.93,-3.23,55.97,-3.15','Dublin':'53.33,-6.30,53.36,-6.22','Toronto':'43.62,-79.50,43.75,-79.30',
+ 'Vancouver':'49.24,-123.18,49.30,-123.05','Calgary':'51.02,-114.12,51.08,-114.02','Sydney':'-33.92,151.15,-33.84,151.25',
+ 'Melbourne':'-37.84,144.92,-37.78,145.00','Brisbane':'-27.50,152.98,-27.44,153.06','Perth':'-31.98,115.82,-31.92,115.90',
+ 'Auckland':'-36.89,174.73,-36.83,174.80','Dubai':'25.05,55.10,25.30,55.40','Doha':'25.25,51.45,25.40,51.58',
+ 'Lahore':'31.45,74.25,31.60,74.42','Karachi':'24.80,66.98,24.95,67.12','Islamabad':'33.65,72.98,33.75,73.12',
+ 'Rawalpindi':'33.56,73.00,33.65,73.10','Faisalabad':'31.38,73.03,31.45,73.12'};
+const HUNT_NICHES=[['cafes','["amenity"="cafe"]'],['restaurants','["amenity"="restaurant"]'],['bakeries','["shop"="bakery"]'],
+ ['cafes','["amenity"="cafe"]'],['fast food spots','["amenity"="fast_food"]'],['restaurants','["amenity"="restaurant"]'],
+ ['dessert shops','["amenity"="ice_cream"]'],['sweet shops','["shop"="confectionery"]'],['beauty salons','["shop"="beauty"]'],
+ ['hair salons','["shop"="hairdresser"]'],['gyms','["leisure"="fitness_centre"]'],['clothing boutiques','["shop"="clothes"]']];
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.private.coffee/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const _api=api;let hunting=false;
+async function huntNow(){if(hunting)return 'I am already hunting, sir.';hunting=true;store.set('huntLast',String(Date.now()));
+ try{const cities=Object.keys(HUNT_CITIES);const n=Number(store.get('huntN')||0);store.set('huntN',String(n+1));
+  const city=cities[n%cities.length],nk=HUNT_NICHES[(n+Math.floor(n/cities.length))%HUNT_NICHES.length],niche=nk[0];
+  toast('new','HUNTING LEADS',niche+' in '+city);
+  const bb=HUNT_CITIES[city],q='[out:json][timeout:25];(nwr'+nk[1]+'["website"]('+bb+');nwr'+nk[1]+'["contact:website"]('+bb+'););out tags 60;';
+  let els=null;
+  for(const ep of OVERPASS){try{const r=await fetch(ep+'?data='+encodeURIComponent(q));if(r.ok){els=(await r.json()).elements||[];break}}catch(e){}}
+  if(!els)return 'The business map is not answering right now, sir. I will try again later.';
+  const items=els.map(e=>e.tags||{}).filter(t=>t.name&&(t.website||t['contact:website'])).sort(()=>Math.random()-.5).slice(0,12)
+   .map(t=>({name:t.name,website:String(t.website||t['contact:website']).split(';')[0].trim(),email:t.email||t['contact:email']||''}));
+  if(!items.length)return 'No '+niche+' with websites in '+city+'. I will try another city next time.';
+  const r=await _api('addLeads',{city:city,niche:niche,items:items});refresh();return r.reply;
+ }catch(e){return 'Lead hunt failed: '+e.message}finally{hunting=false}}
+api=async(action,data)=>{if(action==='ask'&&/\b(find|hunt|get|search|bring)\b.*\bleads?\b/i.test((data&&data.msg)||''))return{reply:await huntNow()};return _api(action,data)};
+function huntIfDue(){if(API&&SECRET&&Date.now()-Number(store.get('huntLast')||0)>4*3600e3)huntNow().then(m=>toast('new','LEAD HUNT',m))}
+setTimeout(huntIfDue,20000);setInterval(huntIfDue,10*60e3);</script></body></html>
