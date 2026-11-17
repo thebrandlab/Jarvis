@@ -1,0 +1,147 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Jarvis</title><style>
+:root{--c:#5fd4ff;--g:#78ffbe;--bg:#05080d;--t:#cfe9ff;--line:rgba(95,212,255,.25)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--t);font-family:-apple-system,Helvetica,sans-serif;overflow:hidden;height:100vh}
+canvas{position:fixed;inset:0;z-index:0}
+#top{position:fixed;top:18px;left:24px;right:24px;display:flex;justify-content:space-between;font-size:12px;letter-spacing:5px;color:var(--c);z-index:2}
+.panel{position:fixed;top:56px;bottom:190px;width:27%;max-width:380px;background:rgba(95,212,255,.05);border:1px solid var(--line);border-radius:14px;padding:14px;overflow:auto;z-index:2}
+#left{left:20px}#right{right:20px}
+.panel h3{margin:0 0 10px;font-size:12px;letter-spacing:4px;color:var(--c);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;color:#7aa7c2;font-weight:500;padding:6px 4px;border-bottom:1px solid var(--line)}
+td{padding:7px 4px;border-bottom:1px solid rgba(95,212,255,.08);vertical-align:top}
+.pill{font-size:11px;padding:2px 8px;border-radius:10px;border:1px solid var(--line);white-space:nowrap}
+.empty{color:#5b7a8c;font-size:12.5px}
+#ui{position:fixed;left:0;right:0;bottom:20px;text-align:center;z-index:3}
+#status{letter-spacing:4px;font-size:12px;color:var(--c);margin-bottom:10px}
+#say{font-size:18px;max-width:600px;margin:0 auto 16px;min-height:48px;padding:0 20px}
+button{background:rgba(95,212,255,.15);border:1px solid var(--c);color:var(--t);padding:11px 22px;border-radius:30px;font-size:13px;letter-spacing:3px;cursor:pointer;margin:0 4px}
+button.on{background:rgba(120,255,190,.18);border-color:var(--g)}
+#ui input{background:transparent;border:1px solid #234;color:var(--t);padding:10px 14px;border-radius:20px;width:240px;margin-left:6px}
+select{background:#0b1620;border:1px solid #234;color:var(--t);padding:9px 10px;border-radius:20px;margin-left:6px}
+#vnote{font-size:11px;letter-spacing:2px;color:#5b7a8c;margin-top:10px}
+#toasts{position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:5;display:flex;flex-direction:column;gap:8px;width:360px}
+.toast{background:rgba(8,20,30,.96);border:1px solid var(--c);border-left:4px solid var(--c);border-radius:10px;padding:10px 14px;font-size:13px;animation:in .3s ease}
+.toast b{display:block;font-size:11px;letter-spacing:3px;color:var(--c);margin-bottom:3px}
+.toast.won{border-color:var(--g)}.toast.won b{color:var(--g)}
+@keyframes in{from{opacity:0;transform:translateY(-10px)}}
+#setup{position:fixed;inset:0;background:rgba(5,8,13,.97);z-index:10;display:none;align-items:center;justify-content:center}
+#setup .box{width:min(460px,92vw);border:1px solid var(--c);border-radius:16px;padding:24px;background:#071018}
+#setup h2{margin:0 0 6px;font-size:14px;letter-spacing:4px;color:var(--c)}
+#setup p{font-size:13px;color:#8fb3c8;margin:0 0 16px}
+#setup input{display:block;width:100%;background:transparent;border:1px solid #234;color:var(--t);padding:10px 14px;border-radius:12px;margin:0 0 12px}
+@media (max-width:900px){.panel{display:none}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="top"><span>JARVIS · ONLINE</span><span id="clock"></span></div>
+<div class="panel" id="left"><h3>LEADS</h3><div id="leads" class="empty">Loading…</div></div>
+<div class="panel" id="right"><h3>OPEN TASKS</h3><div id="tasks" class="empty">Loading…</div></div>
+<div id="toasts"></div>
+<div id="ui"><div id="status">TAP TO START</div><div id="say"></div>
+<button id="btn">START</button><button id="wake" style="display:none">HEY JARVIS: OFF</button>
+<select id="voiceSel"><option value="bm_george">George · British</option><option value="bm_lewis">Lewis · British</option><option value="bm_daniel">Daniel · British</option><option value="bm_fable">Fable · British</option><option value="am_onyx">Onyx · Deep US</option><option value="am_fenrir">Fenrir · Deep US</option></select>
+<select id="styleSel"><option value="1">Natural</option><option value="0.93">Deep</option><option value="0.86">Sci-fi</option></select>
+<input id="txt" placeholder="type here and press Enter">
+<div id="vnote">LOADING HD VOICE (FIRST TIME ABOUT 1 MINUTE)…</div></div>
+<div id="setup"><div class="box"><h2>CONNECT JARVIS</h2><p>Paste your Google web app link (ends with /exec) and your Jarvis secret. You only do this once.</p>
+<input id="apiIn" placeholder="https://script.google.com/macros/s/.../exec"><input id="secIn" type="password" placeholder="Jarvis secret"><button id="saveCfg">CONNECT</button></div></div>
+<script type="module">
+const $=id=>document.getElementById(id);
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+/* connection to the Google brain */
+let API=store.get('jarvisApi'),SECRET=store.get('jarvisSecret');
+if(!API||!SECRET)$('setup').style.display='flex';
+$('saveCfg').onclick=()=>{API=$('apiIn').value.trim();SECRET=$('secIn').value.trim();if(!API||!SECRET)return;
+ store.set('jarvisApi',API);store.set('jarvisSecret',SECRET);$('setup').style.display='none';refresh()};
+async function api(action,data){const r=await fetch(API,{method:'POST',body:JSON.stringify(Object.assign({action:action,secret:SECRET},data||{}))});
+ const j=await r.json();if(j.error)throw new Error(j.error);return j}
+/* particle core */
+const c=$('c'),x=c.getContext('2d');let W,H;
+function rs(){W=c.width=innerWidth;H=c.height=innerHeight}rs();onresize=rs;
+const P=[];for(let i=0;i<900;i++){P.push({t:Math.acos(2*Math.random()-1),p:Math.random()*6.283,s:Math.random()})}
+let energy=0,target=0.05,rot=0,mode='idle';
+function draw(ts){x.fillStyle='rgba(5,8,13,.35)';x.fillRect(0,0,W,H);
+ energy+=(target-energy)*.08;rot+=.002+energy*.01;
+ const R=Math.min(W,H)*.2,cx=W/2,cy=H*.38,beat=1+Math.sin(ts/180)*energy*.25+Math.sin(ts/330)*.02;
+ for(const q of P){const r=R*beat*(1+Math.sin(q.s*50+ts/200)*energy*.35),a=q.p+rot;
+  const X=Math.sin(q.t)*Math.cos(a),Y=Math.cos(q.t),Z=Math.sin(q.t)*Math.sin(a),k=.6+Z*.4;
+  x.fillStyle=mode==='listen'?'rgba(120,255,190,'+k+')':'rgba(95,212,255,'+k+')';
+  x.fillRect(cx+X*r,cy+Y*r,1.6*k+.4,1.6*k+.4)}
+ requestAnimationFrame(draw)}requestAnimationFrame(draw);
+setInterval(()=>{$('clock').textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})},1000);
+/* HD voice (Kokoro, runs free on your Mac) */
+$('voiceSel').value=store.get('jarvisVoice')||'bm_george';$('styleSel').value=store.get('jarvisStyle')||'0.93';
+$('voiceSel').onchange=()=>store.set('jarvisVoice',$('voiceSel').value);
+$('styleSel').onchange=()=>store.set('jarvisStyle',$('styleSel').value);
+let tts=null;
+(async()=>{try{const m=await import('https://cdn.jsdelivr.net/npm/kokoro-js@1/+esm');
+ tts=await m.KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX',{dtype:'q8',device:'wasm'});
+ $('vnote').textContent='HD VOICE READY'}catch(e){console.error(e);$('vnote').textContent='HD VOICE UNAVAILABLE, USING MAC VOICE'}})();
+let macVoice=null;function pick(){const vs=speechSynthesis.getVoices();macVoice=vs.find(v=>v.name==='Daniel')||vs.find(v=>/en-GB/.test(v.lang))||null}
+pick();speechSynthesis.onvoiceschanged=pick;
+let speaking=false,wakeOn=false,awaiting=false,rec=null,anim=null;
+function idleText(){return wakeOn?'SAY "HEY JARVIS"':'TAP TO TALK'}
+function beginSpeak(t){$('say').textContent=t;speaking=true;mode='speak';$('status').textContent='SPEAKING';
+ anim=setInterval(()=>{target=.3+Math.random()*.7},120);try{if(rec)rec.abort()}catch(e){}}
+function endSpeak(){clearInterval(anim);speaking=false;target=.05;mode=awaiting?'listen':'idle';
+ $('status').textContent=awaiting?'LISTENING':idleText();if(wakeOn&&rec)setTimeout(()=>{try{rec.start()}catch(e){}},250)}
+function playBlob(b){return new Promise(res=>{const a=new Audio(URL.createObjectURL(b));a.preservesPitch=false;
+ a.playbackRate=parseFloat($('styleSel').value);a.onended=res;a.onerror=res;a.play().catch(res)})}
+async function speak(t){beginSpeak(t);
+ try{if(tts){const parts=(t.match(/[^.!?]+[.!?]*/g)||[t]).map(s=>s.trim()).filter(Boolean);const v=$('voiceSel').value;
+   let next=tts.generate(parts[0],{voice:v});
+   for(let i=0;i<parts.length;i++){const audio=await next;if(i+1<parts.length)next=tts.generate(parts[i+1],{voice:v});await playBlob(audio.toBlob())}}
+  else await new Promise(res=>{speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);if(macVoice)u.voice=macVoice;u.pitch=.85;u.onend=res;u.onerror=res;speechSynthesis.speak(u)})
+ }catch(e){console.error(e)}
+ endSpeak()}
+/* brain */
+let history=[];
+async function handle(q,silent){if(!silent)$('say').textContent='You: '+q;
+ try{const m=q.match(/^\s*(?:jarvis[, ]*)?remember(?: that)?\s+(.+)/i);
+  if(m){const r=await api('remember',{note:m[1]});return speak(r.reply)}
+  $('status').textContent='THINKING';target=.25;
+  const r=await api('ask',{msg:q,history:history});
+  history.push({role:'user',parts:[{text:q}]},{role:'model',parts:[{text:r.reply}]});history=history.slice(-12);speak(r.reply)
+ }catch(e){speak('Connection problem: '+e.message)}}
+/* wake word */
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+function updWake(){$('wake').textContent='HEY JARVIS: '+(wakeOn?'ON':'OFF');$('wake').className=wakeOn?'on':''}
+function startWake(){if(!SR){speak('Voice input is not available here. Please type.');return}
+ rec=new SR();rec.continuous=true;rec.interimResults=false;rec.lang='en-US';
+ rec.onresult=e=>{if(speaking)return;const t=e.results[e.results.length-1][0].transcript.trim();
+  if(awaiting){awaiting=false;mode='idle';handle(t);return}
+  const i=t.toLowerCase().lastIndexOf('jarvis');if(i<0)return;
+  const cmd=t.slice(i+6).replace(/^[\s,.!?]+/,'');
+  if(cmd.length>2)handle(cmd);else{awaiting=true;speak('Yes, Talha?')}};
+ rec.onerror=e=>{if(e.error==='not-allowed'||e.error==='service-not-allowed'){wakeOn=false;updWake();$('status').textContent='MIC BLOCKED, ALLOW IT IN THE ADDRESS BAR'}};
+ rec.onend=()=>{if(wakeOn&&!speaking)setTimeout(()=>{try{rec.start()}catch(e){}},300)};
+ try{rec.start();wakeOn=true}catch(e){}updWake()}
+function stopWake(){wakeOn=false;try{if(rec)rec.stop()}catch(e){}updWake();$('status').textContent=idleText()}
+/* dashboard + pop-ups */
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]))}
+function table(rows,cols,empty){if(!rows.length)return '<div class="empty">'+empty+'</div>';
+ return '<table><tr>'+cols.map(cl=>'<th>'+cl[1]+'</th>').join('')+'</tr>'+rows.map(r=>'<tr>'+cols.map(cl=>'<td>'+(cl[0]==='Status'?'<span class="pill">'+esc(r[cl[0]])+'</span>':esc(r[cl[0]]))+'</td>').join('')+'</tr>').join('')+'</table>'}
+let seen=null;try{const s=JSON.parse(store.get('jarvisSeen'));if(s)seen=new Set(s)}catch(e){}
+function toast(kind,title,text){const d=document.createElement('div');d.className='toast '+kind;
+ d.innerHTML='<b>'+esc(title)+'</b>'+esc(text);$('toasts').prepend(d);setTimeout(()=>d.remove(),10000)}
+async function refresh(){if(!API||!SECRET)return;let d;
+ try{d=await api('dashboard')}catch(e){if(/secret/i.test(e.message))$('setup').style.display='flex';return}
+ $('leads').innerHTML=table(d.leads,[['Company','Company'],['Need','Need'],['Score','Score'],['Status','Status']],'No leads yet.');
+ $('tasks').innerHTML=table(d.tasks,[['Task','Task'],['Assigned to','Who'],['Deadline','Due'],['Status','Status']],'No open tasks.');
+ const ev=[];
+ d.leads.forEach(l=>ev.push(['lead:'+l._row,'new','NEW LEAD',(l.Company||'')+(l.Need?' · '+l.Need:'')]));
+ d.won.forEach(w=>ev.push(['won:'+w._row,'won','CLIENT ONBOARDED',w.Company||'']));
+ d.tasks.forEach(t=>ev.push(['task:'+t._row,'new','NEW TASK',(t.Task||'')+(t['Assigned to']?' → '+t['Assigned to']:'')]));
+ d.mail.forEach(m=>ev.push(['mail:'+m.id,'new','NEW MESSAGE',m.from+': '+m.subject]));
+ const first=!seen;if(first)seen=new Set();
+ ev.forEach(e=>{if(!seen.has(e[0])){seen.add(e[0]);if(!first)toast(e[1],e[2],e[3])}});
+ store.set('jarvisSeen',JSON.stringify([...seen].slice(-500)))}
+refresh();setInterval(refresh,60000);
+/* buttons */
+let started=false;
+$('btn').onclick=()=>{if(!started){started=true;$('btn').textContent='TALK';$('wake').style.display='inline-block';
+  handle('Greet me and give my brief: new leads, open tasks and anything urgent. If the sheet is empty, say so in one line.',true);startWake();return}
+ if(!wakeOn)startWake();awaiting=true;mode='listen';target=.4;$('status').textContent='LISTENING'};
+$('wake').onclick=()=>{wakeOn?stopWake():startWake()};
+$('txt').onkeydown=e=>{if(e.key==='Enter'&&$('txt').value.trim()){handle($('txt').value);$('txt').value=''}};
+</script></body></html>
